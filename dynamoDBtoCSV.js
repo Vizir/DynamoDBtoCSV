@@ -3,6 +3,7 @@ const AWS = require("aws-sdk");
 const unmarshal = require("dynamodb-marshaler").unmarshal;
 const Papa = require("papaparse");
 const fs = require("fs");
+const mysql = require('mysql');
 
 let headers = [];
 let unMarshalledArray = [];
@@ -25,6 +26,7 @@ program
   .option("-p, --profile [profile]", "Use profile from your credentials file")
   .option("-m, --mfa [mfacode]", "Add an MFA code to access profiles that require mfa.")
   .option("-f, --file [file]", "Name of the file to be created")
+  .option("-M, --mysql [table]", "Write the output to a MySQL table")
   .option(
     "-ec --envcreds",
     "Load AWS Credentials using AWS Credential Provider Chain"
@@ -86,7 +88,7 @@ const query = {
   IndexName: program.index,
   Select: program.count ? "COUNT" : (program.select ? "SPECIFIC_ATTRIBUTES" : (program.index ? "ALL_PROJECTED_ATTRIBUTES" : "ALL_ATTRIBUTES")),
   KeyConditionExpression: program.keyExpression,
-  ExpressionAttributeValues: JSON.parse(program.keyExpressionValues),
+  ExpressionAttributeValues: {},
   ProjectionExpression: program.select,
   Limit: 1000
 };
@@ -101,6 +103,17 @@ const scanQuery = {
 if (!program.describe && program.file) {
   var stream = fs.createWriteStream(program.file, { flags: 'a' });
 }
+
+if (!program.describe && program.mysql) {
+  var db = mysql.createConnection({
+    host     : 'host',
+    user     : 'user',
+    password : 'pass',
+    database : 'db'
+  });
+  db.connect();
+}
+
 let rowCount = 0;
 let writeCount = 0;
 let writeChunk = program.size;
@@ -218,6 +231,27 @@ const unparseData = (lastEvaluatedKey) => {
   if (writeCount > 0) {
     // remove column names after first write chunk.
     endData = endData.replace(/(.*\r\n)/, "");;
+  }
+  
+  if (program.mysql) {
+    var mySQLData = Papa.unparse({
+      fields: [...headers],
+      data: unMarshalledArray
+    }, {
+      header: false,
+      quotes: true,
+      delimiter: ",",
+      quoteChar: "\'"
+    });
+    mySQLData = mySQLData.replace(/(.*)\,\r\n/g, "($1,''), ")
+    console.log(mySQLData)
+    db.query('insert into ' 
+              + program.mysql
+              + '(payment_id, document, banking_id, person_id, status, errorDetail)'
+              + 'VALUES (' + mySQLData + ')', function (error, results, fields) {
+      if (error) throw error;
+      console.log('The solution is: ', results[0].solution);
+    });
   }
   if (program.file) {
     writeData(endData);
