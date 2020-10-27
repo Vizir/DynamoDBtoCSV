@@ -43,7 +43,7 @@ if (!program.table) {
 if (program.region && AWS.config.credentials) {
   AWS.config.update({ region: program.region });
 } else {
-  AWS.config.loadFromPath(__dirname + "/config.json");
+  AWS.config.loadFromPath(__dirname + "/config-dynamo.json");
 }
 
 if (program.endpoint) {
@@ -105,13 +105,15 @@ if (!program.describe && program.file) {
 }
 
 if (!program.describe && program.mysql) {
+  mysqlConfig = JSON.parse(fs.readFileSync('config-mysql.json'));
   var db = mysql.createConnection({
-    host     : 'host',
-    user     : 'user',
-    password : 'pass',
-    database : 'db'
+    host     : mysqlConfig.host,
+    user     : mysqlConfig.user,
+    password : mysqlConfig.password,
+    database : mysqlConfig.database
   });
   db.connect();
+  db.query(`truncate table ${program.mysql}`);
 }
 
 let rowCount = 0;
@@ -234,24 +236,23 @@ const unparseData = (lastEvaluatedKey) => {
   }
   
   if (program.mysql) {
-    var mySQLData = Papa.unparse({
-      fields: [...headers],
-      data: unMarshalledArray
-    }, {
-      header: false,
-      quotes: true,
-      delimiter: ",",
-      quoteChar: "\'"
+    var rowsToInsert = []
+    unMarshalledArray.forEach(function (row) {
+      var str = `('${row.paymentId    ? row.paymentId   :  ''}', '${row.document     ? row.document    :  ''}','${row.bankingId    ? row.bankingId   :  ''}', '${row.personId     ? row.personId    :  ''}', '${row.status       ? row.status      :  ''}','${row.errorDetail  ? row.errorDetail :  ''}')`
+      console.log(str);
+      rowsToInsert.push(str);
     });
-    mySQLData = mySQLData.replace(/(.*)\,\r\n/g, "($1,''), ")
-    console.log(mySQLData)
-    db.query('insert into ' 
-              + program.mysql
-              + '(payment_id, document, banking_id, person_id, status, errorDetail)'
-              + 'VALUES (' + mySQLData + ')', function (error, results, fields) {
+    var insertQuery = 'insert ignore into ' 
+                                    + program.mysql
+                                    + ' (payment_id, document, banking_id, person_id, status, errorDetail)'
+                                    + ' VALUES '
+                                    + rowsToInsert.join(', ');
+    console.log(insertQuery)
+    db.query(insertQuery, function (error, results, fields) {
       if (error) throw error;
-      console.log('The solution is: ', results[0].solution);
+      console.log("batch inserted in mysql");
     });
+
   }
   if (program.file) {
     writeData(endData);
