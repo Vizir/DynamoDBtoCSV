@@ -238,7 +238,7 @@ const unparseData = (lastEvaluatedKey) => {
   if (program.mysql) {
     var rowsToInsert = []
     unMarshalledArray.forEach(function (row) {
-      var str = `('${row.paymentId    ? row.paymentId   :  ''}', '${row.document     ? row.document    :  ''}','${row.bankingId    ? row.bankingId   :  ''}', '${row.personId     ? row.personId    :  ''}', '${row.status       ? row.status      :  ''}','${row.errorDetail  ? row.errorDetail :  ''}')`
+      var str = `('${row.paymentId    ? row.paymentId   :  ''}', '${row.document     ? row.document    :  ''}','${row.bankingId    ? row.bankingId   :  ''}', '${row.personId     ? row.personId    :  ''}', '${row.status       ? row.status      :  ''}','${row.errorDetail  ? row.errorDetail.replace(/\'/g,'') :  ''}')`
       console.log(str);
       rowsToInsert.push(str);
     });
@@ -247,7 +247,7 @@ const unparseData = (lastEvaluatedKey) => {
                                     + ' (payment_id, document, banking_id, person_id, status, errorDetail)'
                                     + ' VALUES '
                                     + rowsToInsert.join(', ');
-    console.log(insertQuery)
+    console.log('insertQuery', insertQuery)
     db.query(insertQuery, function (error, results, fields) {
       if (error) throw error;
       console.log("batch inserted in mysql");
